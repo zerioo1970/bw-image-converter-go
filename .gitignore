@@ -1,0 +1,11 @@
+# Go 编译产物（保留 Windows exe 以便直接下载使用）
+*.test
+*.out
+
+# 但保留 syso 资源文件和发布用的 exe（不忽略）
+# *.syso 和 黑白图片生成器.exe 需要提交
+
+# 编辑器
+.idea/
+.vscode/
+*.swp
