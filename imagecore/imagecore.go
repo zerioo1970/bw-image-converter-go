@@ -10,6 +10,8 @@ package imagecore
 import (
 	"image"
 	"image/draw"
+
+	xdraw "golang.org/x/image/draw"
 )
 
 // PercentToThreshold 把 0~100 的百分比映射为 0~255 的灰度阈值（四舍五入）。
@@ -61,7 +63,42 @@ func Binarize(gray *image.Gray, percent int) *image.Gray {
 	return out
 }
 
-// ScaleDown 把灰度图等比缩小到不超过 maxW x maxH（最近邻，足够用于预览）。
+// BinarizeAA 是二值化的「抗锯齿」版本：在阈值附近保留过渡灰度，
+// 使斜线、曲线的边缘平滑，避免锯齿（台阶状）。
+//
+// edgeWidth 是过渡带宽度（以灰阶为单位）：
+//   - 灰度值离阈值越远 -> 越接近纯黑或纯白
+//   - 落在阈值 ±edgeWidth/2 范围内 -> 按比例取过渡灰度
+//
+// edgeWidth 越大，边缘越柔和（但太大整体会发灰）；越小越接近纯黑白。
+func BinarizeAA(gray *image.Gray, percent int, edgeWidth float64) *image.Gray {
+	if edgeWidth < 1 {
+		edgeWidth = 1
+	}
+	t := float64(PercentToThreshold(percent))
+
+	// 预先算好 0~255 每个灰阶的映射结果（查找表，速度快）
+	var lut [256]uint8
+	for i := 0; i < 256; i++ {
+		v := (float64(i)-t)/edgeWidth + 0.5
+		switch {
+		case v <= 0:
+			lut[i] = 0
+		case v >= 1:
+			lut[i] = 255
+		default:
+			lut[i] = uint8(v*255 + 0.5)
+		}
+	}
+
+	out := image.NewGray(gray.Bounds())
+	for idx, g := range gray.Pix {
+		out.Pix[idx] = lut[g]
+	}
+	return out
+}
+
+// ScaleDown 把灰度图等比缩小到不超过 maxW x maxH（高质量重采样）。
 // 若图片本身已小于上限，则原样返回。
 func ScaleDown(gray *image.Gray, maxW, maxH int) *image.Gray {
 	b := gray.Bounds()
@@ -85,13 +122,8 @@ func ScaleDown(gray *image.Gray, maxW, maxH int) *image.Gray {
 		nh = 1
 	}
 
+	// 用 CatmullRom 高质量缩放，预览不会因缩放本身产生额外锯齿
 	out := image.NewGray(image.Rect(0, 0, nw, nh))
-	for y := 0; y < nh; y++ {
-		srcY := b.Min.Y + int(float64(y)/scale)
-		for x := 0; x < nw; x++ {
-			srcX := b.Min.X + int(float64(x)/scale)
-			out.SetGray(x, y, gray.GrayAt(srcX, srcY))
-		}
-	}
+	xdraw.CatmullRom.Scale(out, out.Bounds(), gray, gray.Bounds(), xdraw.Src, nil)
 	return out
 }

@@ -36,6 +36,9 @@ import (
 const (
 	previewMaxW = 600
 	previewMaxH = 460
+
+	// 抗锯齿过渡带宽度（灰阶）。越大边缘越柔和，越小越接近纯黑白。
+	aaEdgeWidth = 40.0
 )
 
 type appState struct {
@@ -45,6 +48,7 @@ type appState struct {
 	thresholdLabel *walk.Label
 	slider         *walk.Slider
 	progress       *walk.ProgressBar
+	aaCheck        *walk.CheckBox
 	saveBtn        *walk.PushButton
 
 	srcPath     string
@@ -100,6 +104,12 @@ func main() {
 				AssignTo: &app.progress,
 				MaxValue: 100,
 				Value:    50,
+			},
+			CheckBox{
+				AssignTo:         &app.aaCheck,
+				Text:             "平滑边缘（抗锯齿）—— 关闭则为纯黑白两色",
+				Checked:          true,
+				OnCheckedChanged: app.onSlide,
 			},
 			Composite{
 				Layout: HBox{MarginsZero: true},
@@ -165,12 +175,20 @@ func (a *appState) onSlide() {
 	}
 }
 
+// binarize 根据「平滑边缘」复选框状态选择二值化方式。
+func (a *appState) binarize(g *image.Gray) *image.Gray {
+	if a.aaCheck != nil && a.aaCheck.Checked() {
+		return imagecore.BinarizeAA(g, a.slider.Value(), aaEdgeWidth)
+	}
+	return imagecore.Binarize(g, a.slider.Value())
+}
+
 // updatePreview 用缩小的灰度图做二值化并显示，保证拖动流畅。
 func (a *appState) updatePreview() {
 	if a.grayPreview == nil {
 		return
 	}
-	bin := imagecore.Binarize(a.grayPreview, a.slider.Value())
+	bin := a.binarize(a.grayPreview)
 	bmp, err := walk.NewBitmapFromImageForDPI(bin, 96)
 	if err != nil {
 		return
@@ -188,7 +206,7 @@ func (a *appState) onSave() {
 	if a.grayFull == nil {
 		return
 	}
-	bin := imagecore.Binarize(a.grayFull, a.slider.Value())
+	bin := a.binarize(a.grayFull)
 
 	desktop := desktopDir()
 	base := strings.TrimSuffix(filepath.Base(a.srcPath), filepath.Ext(a.srcPath))

@@ -76,6 +76,38 @@ func TestExtremes(t *testing.T) {
 	}
 }
 
+func TestBinarizeAA(t *testing.T) {
+	// 渐变图，AA 二值化应：远离阈值的为纯黑/纯白，阈值附近出现过渡灰
+	grad := image.NewGray(image.Rect(0, 0, 256, 1))
+	for i := 0; i < 256; i++ {
+		grad.SetGray(i, 0, color.Gray{Y: uint8(i)})
+	}
+	out := BinarizeAA(grad, 50, 40) // 阈值=128, 过渡带宽=40
+
+	// 远低于阈值（如灰度0）应为纯黑
+	if out.GrayAt(0, 0).Y != 0 {
+		t.Fatalf("远低于阈值应为纯黑，实为 %d", out.GrayAt(0, 0).Y)
+	}
+	// 远高于阈值（如灰度255）应为纯白
+	if out.GrayAt(255, 0).Y != 255 {
+		t.Fatalf("远高于阈值应为纯白，实为 %d", out.GrayAt(255, 0).Y)
+	}
+	// 阈值处(128)应为中间灰，且严格介于黑白之间（即存在抗锯齿过渡）
+	mid := out.GrayAt(128, 0).Y
+	if mid == 0 || mid == 255 {
+		t.Fatalf("阈值附近应有过渡灰度，实为 %d", mid)
+	}
+	// 单调不减：灰度递增，输出也应递增（或持平）
+	prev := -1
+	for i := 0; i < 256; i++ {
+		v := int(out.GrayAt(i, 0).Y)
+		if v < prev {
+			t.Fatalf("AA 输出应单调不减，位置 %d 出现下降", i)
+		}
+		prev = v
+	}
+}
+
 func TestScaleDown(t *testing.T) {
 	big := image.NewGray(image.Rect(0, 0, 1000, 500))
 	out := ScaleDown(big, 200, 200)
