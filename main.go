@@ -36,9 +36,6 @@ import (
 const (
 	previewMaxW = 600
 	previewMaxH = 460
-
-	// 抗锯齿过渡带宽度（灰阶）。越大边缘越柔和，越小越接近纯黑白。
-	aaEdgeWidth = 40.0
 )
 
 type appState struct {
@@ -48,7 +45,6 @@ type appState struct {
 	thresholdLabel *walk.Label
 	slider         *walk.Slider
 	progress       *walk.ProgressBar
-	aaCheck        *walk.CheckBox
 	saveBtn        *walk.PushButton
 
 	srcPath     string
@@ -91,7 +87,7 @@ func main() {
 			},
 			Label{
 				AssignTo: &app.thresholdLabel,
-				Text:     "灰度阈值：50%   (灰度值 128 / 255)",
+				Text:     "阈值：50%   灰度高于 128 的像素 → 纯白，其余保持不变",
 			},
 			Slider{
 				AssignTo:       &app.slider,
@@ -104,12 +100,6 @@ func main() {
 				AssignTo: &app.progress,
 				MaxValue: 100,
 				Value:    50,
-			},
-			CheckBox{
-				AssignTo:         &app.aaCheck,
-				Text:             "平滑边缘（抗锯齿）—— 关闭则为纯黑白两色",
-				Checked:          true,
-				OnCheckedChanged: app.onSlide,
 			},
 			Composite{
 				Layout: HBox{MarginsZero: true},
@@ -168,27 +158,24 @@ func (a *appState) onOpen() {
 func (a *appState) onSlide() {
 	p := a.slider.Value()
 	t := imagecore.PercentToThreshold(p)
-	a.thresholdLabel.SetText(fmt.Sprintf("灰度阈值：%d%%   (灰度值 %d / 255)", p, t))
+	a.thresholdLabel.SetText(fmt.Sprintf("阈值：%d%%   灰度高于 %d 的像素 → 纯白，其余保持不变", p, t))
 	a.progress.SetValue(p)
 	if a.grayPreview != nil {
 		a.updatePreview()
 	}
 }
 
-// binarize 根据「平滑边缘」复选框状态选择二值化方式。
-func (a *appState) binarize(g *image.Gray) *image.Gray {
-	if a.aaCheck != nil && a.aaCheck.Checked() {
-		return imagecore.BinarizeAA(g, a.slider.Value(), aaEdgeWidth)
-	}
-	return imagecore.Binarize(g, a.slider.Value())
+// transform 按当前阈值处理灰度图：灰度高于阈值的像素变纯白，其余不变。
+func (a *appState) transform(g *image.Gray) *image.Gray {
+	return imagecore.WhitenAbove(g, a.slider.Value())
 }
 
-// updatePreview 用缩小的灰度图做二值化并显示，保证拖动流畅。
+// updatePreview 用缩小的灰度图做处理并显示，保证拖动流畅。
 func (a *appState) updatePreview() {
 	if a.grayPreview == nil {
 		return
 	}
-	bin := a.binarize(a.grayPreview)
+	bin := a.transform(a.grayPreview)
 	bmp, err := walk.NewBitmapFromImageForDPI(bin, 96)
 	if err != nil {
 		return
@@ -206,7 +193,7 @@ func (a *appState) onSave() {
 	if a.grayFull == nil {
 		return
 	}
-	bin := a.binarize(a.grayFull)
+	bin := a.transform(a.grayFull)
 
 	desktop := desktopDir()
 	base := strings.TrimSuffix(filepath.Base(a.srcPath), filepath.Ext(a.srcPath))

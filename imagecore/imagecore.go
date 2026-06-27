@@ -63,6 +63,21 @@ func Binarize(gray *image.Gray, percent int) *image.Gray {
 	return out
 }
 
+// WhitenAbove 把灰度「高于」阈值的像素改为纯白(255)，其余像素保持原灰度不变。
+// 规则：灰度值 > 阈值 -> 255(白)；灰度值 <= 阈值 -> 原样不变。
+func WhitenAbove(gray *image.Gray, percent int) *image.Gray {
+	t := PercentToThreshold(percent)
+	out := image.NewGray(gray.Bounds())
+	for i, v := range gray.Pix {
+		if v > t {
+			out.Pix[i] = 255
+		} else {
+			out.Pix[i] = v // 不改
+		}
+	}
+	return out
+}
+
 // BinarizeAA 是二值化的「抗锯齿」版本：在阈值附近保留过渡灰度，
 // 使斜线、曲线的边缘平滑，避免锯齿（台阶状）。
 //

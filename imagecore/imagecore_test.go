@@ -108,6 +108,28 @@ func TestBinarizeAA(t *testing.T) {
 	}
 }
 
+func TestWhitenAbove(t *testing.T) {
+	grad := image.NewGray(image.Rect(0, 0, 256, 1))
+	for i := 0; i < 256; i++ {
+		grad.SetGray(i, 0, color.Gray{Y: uint8(i)})
+	}
+	out := WhitenAbove(grad, 50) // 阈值=128
+	for i := 0; i < 256; i++ {
+		v := out.GrayAt(i, 0).Y
+		if i > 128 {
+			// 高于阈值 -> 纯白
+			if v != 255 {
+				t.Fatalf("灰度 %d 高于阈值，应为纯白(255)，实为 %d", i, v)
+			}
+		} else {
+			// 不高于阈值 -> 原样不变
+			if int(v) != i {
+				t.Fatalf("灰度 %d 未高于阈值，应保持不变，实为 %d", i, v)
+			}
+		}
+	}
+}
+
 func TestScaleDown(t *testing.T) {
 	big := image.NewGray(image.Rect(0, 0, 1000, 500))
 	out := ScaleDown(big, 200, 200)
